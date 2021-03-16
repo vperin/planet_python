@@ -85,9 +85,9 @@ class Filter(object):
                 "lte": cc
             }
             }
-    def add_asset_type(self, asset_one = 'analytic_sr',asset_two = 'analytic'):
+    def add_asset_type(self, asset_one = 'analytic_sr',asset_two = 'udm2'):
         '''
-        Add one or two different asset types. The defaul values are: "analytic_sr" and "analytic". 
+        Add one or two different asset types. The default values are: "analytic_sr_udm2" and "analytic". 
         '''
         return {
             "type": "AndFilter",
@@ -95,7 +95,7 @@ class Filter(object):
                 {"type": "AssetFilter",
                 "config": [asset_one]},
                 {"type": "AssetFilter",
-                    "config": [asset_two]}]}
+                    "config": [asset_two]},]}
 
 def get_feature_coord(geojson_path, feature_index):
     '''Function to select one feature of a multi-feature shapefile.
@@ -145,7 +145,7 @@ def get_feature_coord(geojson_path, feature_index):
     return geojson_geometry
 
 def get_point_square(lat, lon, size = 0.0004 ):
-    '''This function uses the coordinates of a point (i.e. lat and long in decimal degrees) and create a geojson dictionary based on a given size (i.e. distance in decimal degrees). The point is the center of the square.
+    '''This function uses the coordinates of a point (i.e. lat and long in decimal degrees) and create a geojson dictionary based on a given size (i.e. distance in decimal degrees). The point is the upper left corner of the square.
 
     ----------
     Parameters
@@ -191,6 +191,57 @@ def get_point_square(lat, lon, size = 0.0004 ):
         ]
         }
     return geojson_square
+
+def get_point_bbox(lat,lon, size = 0.0004):
+    '''This function uses the coordinates of a point (i.e. lat and long in decimal degrees) and create a geojson dictionary based on a given size (i.e. distance in decimal degrees). The point is center of the square.
+
+    ----------
+    Parameters
+    ----------
+    lat: float
+        Latitude in decimal degrees. Example: -30.1977440766763.
+
+    lon: float
+        Longitude in decimal degrees. Example: 146.610309485323.
+
+    size : float
+        The default is to set to size = 0.0004 (~30 meters). 
+    ----------
+    Return: 
+    ----------
+        dict: with feature type (i.e. Polygon) and coordinates. 
+    ----------
+    Example: 
+    ----------
+
+    get_point_square(-30.19,146.61) 
+
+    Output:
+
+    {'type': 'Polygon',
+        'coordinates': [[[146.6096, -30.189600000000002],
+        [146.61040000000003, -30.189600000000002],
+        [146.61040000000003, -30.1904],
+        [146.6096, -30.1904],
+        [146.6096, -30.189600000000002]]]}
+
+    '''
+    
+    # Bounding box around the point.
+    geojson_square = {
+      "type": "Polygon",
+      "coordinates": [
+        [ 
+          [lon - size, lat + size], #left upper corner 1
+          [lon + size, lat + size], #right upper corner 2
+          [lon + size, lat - size], #right lower corner 3
+          [lon - size, lat - size],  #left lower corner 4
+          [lon - size, lat + size] #left upper corner 1
+        ]
+      ]
+    }
+    return geojson_square
+
 
 def place_order(request,orders_url, auth, headers):
     '''
@@ -391,7 +442,7 @@ def planet_search(planet_key,item_type, st, ed, geojson, save_dir,search_name = 
     Filters.append(filter_date)
     filter_cloud = Filter().add_cloud_filter(cc = cc) #only get images which have <50% cloud coverage
     Filters.append(filter_cloud)
-    filter_asset = Filter().add_asset_type(asset_one='analytic_sr',asset_two='analytic')
+    filter_asset = Filter().add_asset_type(asset_one='analytic_sr',asset_two='udm2')
     Filters.append(filter_asset)
 
     # combine our geo, date, cloud filters
@@ -416,8 +467,8 @@ def planet_search(planet_key,item_type, st, ed, geojson, save_dir,search_name = 
     name = item_type + '_' + search_name + '.csv'
 
     # handle directory problem
-    up_dir = save_dir.replace('/',"")
-    directory = os.getcwd() + '\\' + up_dir 
+    # up_dir = save_dir.replace('/',"")
+    directory = os.path.join(os.getcwd(),save_dir)  
 
     if os.path.exists(directory) == False:
         os.makedirs(directory)
@@ -485,14 +536,15 @@ def planet_download_clip(planet_key, geojson, feature_name, items_id, item_type,
     # Define product specifications! This is an important step.
     same_src_products = [{"item_ids": items_id,
                           "item_type": item_type,
-                          "product_bundle": "analytic_sr,analytic"}]
+                          "product_bundle": "analytic_sr_udm2,analytic_sr"}]
 
     # get geojson coordinates geometry
     clip_aoi = geojson
     # define the clip tool to use in the API!
     clip = {"clip": {"aoi": clip_aoi}}
     # create an order request with the clipping tool
-    request_clip = {"name": "just clip","products": same_src_products,"tools": [clip]}
+    # Send Order to GEE, using this: https://developers.planet.com/docs/integrations/gee/delivery/
+    request_clip = {"name": feature_name,"products": same_src_products,"tools": [clip]}
     # using class PlanetClient
     client = PlanetClient(key = planet_key)
 
